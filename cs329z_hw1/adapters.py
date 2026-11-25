@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Optional
 
+from cs329z_hw1.email_priority import prioritize
 from cs329z_hw1.types import (
     AgentConfig,
     DocWindow,
@@ -61,7 +62,7 @@ def run_priority(email: Email, lm: LMCallable) -> dict:
     * The function does not raise and does not modify ``email``.
     * Live: at least 85% agreement with tests/fixtures/priority_gold.json.
     """
-    raise NotImplementedError
+    return prioritize(email, lm)
 
 
 def run_daily_digest(emails: list[Email], lm: LMCallable) -> str:

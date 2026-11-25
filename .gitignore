@@ -2,7 +2,7 @@
 .venv/
 __pycache__/
 .pytest_cache/
-.lm_cache/
+.lm_cache*/
 data/emails/
 data/raw/
 runs/
