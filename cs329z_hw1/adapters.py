@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Optional
 
+from cs329z_hw1.email_digest import daily_digest
 from cs329z_hw1.email_priority import prioritize
 from cs329z_hw1.types import (
     AgentConfig,
@@ -80,7 +81,7 @@ def run_daily_digest(emails: list[Email], lm: LMCallable) -> str:
       site that email is about; it contains no term listed for the gold
       ignore emails.
     """
-    raise NotImplementedError
+    return daily_digest(emails, lm)
 
 
 def run_bm25_build(docs: list[str]) -> Any:

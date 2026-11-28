@@ -1,8 +1,10 @@
 import datetime
 import re
 
+from openai import RateLimitError
+
 from cs329z_hw1.llm import LM, BudgetExceeded, OutputTruncated
-from cs329z_hw1.types import LMCallable
+from cs329z_hw1.types import Email, LMCallable
 
 SYSTEM_PROMPT = """You triage email for its recipient, at the time it was sent.
 Labels:
@@ -72,28 +74,28 @@ class _Pacer:
 
 _PACER = _Pacer(per_minute=18)                # a little under 20
 
-def call_model(lm: LMCallable, messages: list[dict], tries: int = 4) -> str:
-    for i in range(tries):
-        if isinstance(lm, LM):                # don't slow ScriptedLM in the unit tests
+def call_model(lm: LMCallable, messages: list[dict], max_retries: int = 3) -> str:
+    for attempt in range(max_retries + 1):
+        if isinstance(lm, LM):
             _PACER.wait()
         try:
             return lm(messages) or ""
-        except BudgetExceeded:
-            raise
-        except OutputTruncated as e:
-            return e.text or ""
-        except Exception as e:
-            if type(e).__name__ != "RateLimitError" or i == tries - 1:
-                raise
+        except RateLimitError as e:
+            if attempt == max_retries:
+                raise e
+            print(f"Rate limited (attempt {attempt + 1}), sleeping: {str(e)[:120]}")
             time.sleep(20 + random.random() * 10)
-    return "I am unreachable"  # unreachable; tells the checker
+    return "unreachable"
 
-def prioritize(email, lm):
+def error_reason(desc, email, ex):
+    detail = " ".join(str(ex).split())[:200]   # collapse newlines so the reason stays one line
+    return f'{desc}, email={email.get("id")}, {type(ex).__name__}: {detail}'
+
+def prioritize(email: Email, lm: LMCallable):
     try:
         content = build_user_prompt(email)
     except Exception as e:
-        print(f'Prompt build exception: email={email.get("id")} {type(e).__name__}: {e}')
-        return {"category": "unknown", "reason": f"Prompt build failed: {type(e).__name__}"}
+        return {"category": "unknown", "reason": error_reason('Prompt build failed', email, e)}
     
     try:
         reply = call_model(
@@ -101,17 +103,16 @@ def prioritize(email, lm):
         ) 
     
     except BudgetExceeded as e:
-        print (f'Budget Error: email={email.get("id")}, {type(e).__name__}')
+        reason = error_reason(f'Budget error - adjust CS329Z_BUDGET_USD', email, e)
+        print(reason)
         raise e
     
     except OutputTruncated as e:
-        print(f'Trunc Exception: email={email.get("id")}, {type(e).__name__}')
-        return {"category": "unknown", "reason": f"Max tokens exceeded: {type(e).__name__}"}
+        return {"category": "unknown", "reason": error_reason(f"Max tokens exceeded &&{e.text}&&", email, e)}
     
     
     except Exception as e:
-        print(f'Exception: email={email.get("id")} {type(e).__name__}: {e}')
-        return {"category": "unknown", "reason": f"Model call failed: {type(e).__name__}"}
+        return {"category": "unknown", "reason": error_reason("Model call failed", email, e)}
 
     # will search for label burried in text in first non-empty line
     first_line = next((l for l in reply.splitlines() if l.strip()), "")
